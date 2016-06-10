@@ -63,7 +63,7 @@ mstorage.upload('./upload_file_path.jpg')
 ### Download a file
 
 ```python
-mstorage.downloadTo('<media_id>', './download_file_path.jpg')
+mstorage.download_to('<media_id>', './download_file_path.jpg')
 ```
 
 ### Download a file as bytes object
