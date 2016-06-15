@@ -98,7 +98,7 @@ class MediaStorage(object):
         return self.__get_json(self.__endpoint + '/' + mid)
 
     def meta(self, mid):
-        """get meta meta"""
+        """get media meta"""
         return self.__get_json(self.__endpoint + '/' + mid + '/meta')
 
     def list(self, params=None):
