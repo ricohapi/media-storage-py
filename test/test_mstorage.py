@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 # Copyright (c) 2016 Ricoh Co., Ltd. All Rights Reserved.
 
+import json
 from unittest import TestCase
 from nose.tools import eq_, raises
 import mock
@@ -13,7 +14,7 @@ class TestInit(TestCase):
         aclient = Mock()
         mstorage = MediaStorage(aclient)
         eq_(mstorage._MediaStorage__aclient, aclient)
-        eq_(mstorage._MediaStorage__endpoint, 'https://mss.ricohapi.com/v1/media')
+        eq_(mstorage._MediaStorage__endpoint, 'https://mss.ricohapi.com/v1')
 
 class TestConnect(TestCase):
     def test_ok(self):
@@ -29,7 +30,7 @@ class TestMethodOk(TestCase):
         self.mstorage = MediaStorage(self.aclient)
         self.mstorage.connect()
 
-    @mock.patch('requests.post')
+    @mock.patch('requests.request')
     @mock.patch('ricohapi.mstorage.client.open')
     def test_upload_ok(self, opn, req):
         opn.side_effect = mock.mock_open()
@@ -38,18 +39,18 @@ class TestMethodOk(TestCase):
         ret = self.mstorage.upload('path.jpg')
         opn.assert_called_once_with('path.jpg', 'rb')
         headers = {'Authorization': 'Bearer atoken', 'Content-Type': 'image/jpeg'}
-        req.assert_called_once_with('https://mss.ricohapi.com/v1/media', headers=headers, data=opn())
+        req.assert_called_once_with('post', 'https://mss.ricohapi.com/v1/media', headers=headers, data=opn())
         eq_(ret, {'a': 'b'})
 
-    @mock.patch('requests.get')
+    @mock.patch('requests.request')
     def test_download_ok(self, req):
         req.return_value.content = b'data'
         ret = self.mstorage.download('id1')
         headers = {'Authorization': 'Bearer atoken'}
-        req.assert_called_once_with('https://mss.ricohapi.com/v1/media/id1/content', headers=headers, stream=False)
+        req.assert_called_once_with('get', 'https://mss.ricohapi.com/v1/media/id1/content', headers=headers)
         eq_(ret, b'data')
 
-    @mock.patch('requests.get')
+    @mock.patch('requests.request')
     @mock.patch('ricohapi.mstorage.client.open')
     def test_download_to_ok(self, opn, req):
         opn.side_effect = mock.mock_open()
@@ -59,49 +60,140 @@ class TestMethodOk(TestCase):
         opn.assert_called_once_with('path.jpg', 'wb')
         opn().write.assert_called_once_with('data')
         headers = {'Authorization': 'Bearer atoken'}
-        req.assert_called_once_with('https://mss.ricohapi.com/v1/media/id1/content', headers=headers, stream=True)
+        req.assert_called_once_with('get', 'https://mss.ricohapi.com/v1/media/id1/content', headers=headers, stream=True)
         eq_(ret, None)
 
-    @mock.patch('requests.delete')
-    def test_delete_ok(self, req):
-        params = {'limit': 10}
-        ret = self.mstorage.delete('id1')
-        headers = {'Authorization': 'Bearer atoken'}
-        req.assert_called_once_with('https://mss.ricohapi.com/v1/media/id1', headers=headers)
-        eq_(ret, None)
-
-    @mock.patch('requests.get')
-    def test_info_ok(self, req):
-        req.return_value.text='{"a": "b"}'
-        ret = self.mstorage.info('id1')
-        headers = {'Authorization': 'Bearer atoken'}
-        req.assert_called_once_with('https://mss.ricohapi.com/v1/media/id1', headers=headers, params=None)
-        eq_(ret, {'a': 'b'})
-
-    @mock.patch('requests.get')
-    def test_meta_ok(self, req):
-        req.return_value.text='{"a": "b"}'
-        ret = self.mstorage.meta('id1')
-        headers = {'Authorization': 'Bearer atoken'}
-        req.assert_called_once_with('https://mss.ricohapi.com/v1/media/id1/meta', headers=headers, params=None)
-        eq_(ret, {'a': 'b'})
-
-    @mock.patch('requests.get')
+    @mock.patch('requests.request')
     def test_list_ok(self, req):
         req.return_value.text='{"a": "b"}'
         ret = self.mstorage.list()
         headers = {'Authorization': 'Bearer atoken'}
-        req.assert_called_once_with('https://mss.ricohapi.com/v1/media', headers=headers, params=None)
+        req.assert_called_once_with('get', 'https://mss.ricohapi.com/v1/media', headers=headers)
         eq_(ret, {'a': 'b'})
 
-    @mock.patch('requests.get')
+    @mock.patch('requests.request')
     def test_list_params_ok(self, req):
         req.return_value.text='{"a": "b"}'
         params = {'limit': 10}
         ret = self.mstorage.list(params)
         headers = {'Authorization': 'Bearer atoken'}
-        req.assert_called_once_with('https://mss.ricohapi.com/v1/media', headers=headers, params=params)
+        req.assert_called_once_with('get', 'https://mss.ricohapi.com/v1/media', headers=headers, params=params)
         eq_(ret, {'a': 'b'})
+
+    @mock.patch('requests.request')
+    def test_list_search_ok(self, req):
+        req.return_value.text='{"a": "b"}'
+        query = {'key': 'value'}
+        params = {'filter': query}
+        ret = self.mstorage.list(params)
+        headers = {'Authorization': 'Bearer atoken'}
+        expected_data = json.dumps({
+            'search_version': '2016-06-01',
+            'query': query
+        });
+        req.assert_called_once_with('post', 'https://mss.ricohapi.com/v1/media/search', headers=headers, data=expected_data)
+        eq_(ret, {'a': 'b'})
+
+    @mock.patch('requests.request')
+    def test_delete_ok(self, req):
+        params = {'limit': 10}
+        ret = self.mstorage.delete('id1')
+        headers = {'Authorization': 'Bearer atoken'}
+        req.assert_called_once_with('delete', 'https://mss.ricohapi.com/v1/media/id1', headers=headers)
+        eq_(ret, None)
+
+    @mock.patch('requests.request')
+    def test_info_ok(self, req):
+        req.return_value.text='{"a": "b"}'
+        ret = self.mstorage.info('id1')
+        headers = {'Authorization': 'Bearer atoken'}
+        req.assert_called_once_with('get', 'https://mss.ricohapi.com/v1/media/id1', headers=headers)
+        eq_(ret, {'a': 'b'})
+
+    @mock.patch('requests.request')
+    def test_meta_ok(self, req):
+        req.return_value.text='{"a": "b"}'
+        ret = self.mstorage.meta('id1')
+        headers = {'Authorization': 'Bearer atoken'}
+        req.assert_called_once_with('get', 'https://mss.ricohapi.com/v1/media/id1/meta', headers=headers)
+        eq_(ret, {'a': 'b'})
+
+    @mock.patch('requests.request')
+    def test_meta_gpano_ok(self, req):
+        req.return_value.text='{"a": "b"}'
+        ret = self.mstorage.meta('id1', 'gpano')
+        headers = {'Authorization': 'Bearer atoken'}
+        req.assert_called_once_with('get', 'https://mss.ricohapi.com/v1/media/id1/meta/gpano', headers=headers)
+        eq_(ret, {'a': 'b'})
+
+    @mock.patch('requests.request')
+    def test_meta_exif_ok(self, req):
+        req.return_value.text='{"a": "b"}'
+        ret = self.mstorage.meta('id1', 'exif')
+        headers = {'Authorization': 'Bearer atoken'}
+        req.assert_called_once_with('get', 'https://mss.ricohapi.com/v1/media/id1/meta/exif', headers=headers)
+        eq_(ret, {'a': 'b'})
+
+    @mock.patch('requests.request')
+    def test_meta_user_ok(self, req):
+        req.return_value.text='{"a": "b"}'
+        ret = self.mstorage.meta('id1', 'user')
+        headers = {'Authorization': 'Bearer atoken'}
+        req.assert_called_once_with('get', 'https://mss.ricohapi.com/v1/media/id1/meta/user', headers=headers)
+        eq_(ret, {'a': 'b'})
+
+    @mock.patch('requests.request')
+    def test_meta_user_scope_ok(self, req):
+        req.return_value.text='value'
+        ret = self.mstorage.meta('id1', 'user.key')
+        headers = {'Authorization': 'Bearer atoken'}
+        req.assert_called_once_with('get', 'https://mss.ricohapi.com/v1/media/id1/meta/user/key', headers=headers)
+        eq_(ret, 'value')
+
+
+    @mock.patch('requests.request')
+    def test_add_meta_ok(self, req):
+        meta = {
+            'user._Key-0': b'Value0',
+            'user._Key-1': b'Value1',
+            'user._Key-2': b'Value2',
+            'user._Key-3': b'Value3',
+            'user._Key-4': b'Value\xEF\xBC\x94',
+            'user._Key-5': b'Value\xEF\xBC\x95',
+            'user._Key-6': u'Value6',
+            'user._Key-7': u'Value7',
+            'user._Key-8': u'Value\uFF18',
+            'user._Key-9': u'Value\uFF19',
+        }
+        ret = self.mstorage.add_meta('id1', meta)
+        headers = {'Authorization': 'Bearer atoken', 'Content-Type': 'text/plain'}
+        eq_(req.call_count, 10)
+        req.assert_has_calls([
+            mock.call('put', 'https://mss.ricohapi.com/v1/media/id1/meta/user/_Key-0', headers=headers, data=b'Value0'),
+            mock.call('put', 'https://mss.ricohapi.com/v1/media/id1/meta/user/_Key-1', headers=headers, data=b'Value1'),
+            mock.call('put', 'https://mss.ricohapi.com/v1/media/id1/meta/user/_Key-2', headers=headers, data=b'Value2'),
+            mock.call('put', 'https://mss.ricohapi.com/v1/media/id1/meta/user/_Key-3', headers=headers, data=b'Value3'),
+            mock.call('put', 'https://mss.ricohapi.com/v1/media/id1/meta/user/_Key-4', headers=headers, data=b'Value\xEF\xBC\x94'),
+            mock.call('put', 'https://mss.ricohapi.com/v1/media/id1/meta/user/_Key-5', headers=headers, data=b'Value\xEF\xBC\x95'),
+            mock.call('put', 'https://mss.ricohapi.com/v1/media/id1/meta/user/_Key-6', headers=headers, data=b'Value6'),
+            mock.call('put', 'https://mss.ricohapi.com/v1/media/id1/meta/user/_Key-7', headers=headers, data=b'Value7'),
+            mock.call('put', 'https://mss.ricohapi.com/v1/media/id1/meta/user/_Key-8', headers=headers, data=b'Value\xEF\xBC\x98'),
+            mock.call('put', 'https://mss.ricohapi.com/v1/media/id1/meta/user/_Key-9', headers=headers, data=b'Value\xEF\xBC\x99'),
+        ], any_order=True)
+
+    @mock.patch('requests.request')
+    def test_remove_meta_user_ok(self, req):
+        ret = self.mstorage.remove_meta('id1', 'user')
+        headers = {'Authorization': 'Bearer atoken'}
+        req.assert_called_once_with('delete', 'https://mss.ricohapi.com/v1/media/id1/meta/user', headers=headers)
+        eq_(ret, None)
+
+    @mock.patch('requests.request')
+    def test_remove_meta_user_scope_ok(self, req):
+        ret = self.mstorage.remove_meta('id1', 'user.key')
+        headers = {'Authorization': 'Bearer atoken'}
+        req.assert_called_once_with('delete', 'https://mss.ricohapi.com/v1/media/id1/meta/user/key', headers=headers)
+        eq_(ret, None)
 
 class TestMethodError(TestCase):
     def setUp(self):
@@ -110,78 +202,62 @@ class TestMethodError(TestCase):
         self.mstorage = MediaStorage(self.aclient)
         self.mstorage.connect()
 
-    @raises(ValueError)
-    @mock.patch('requests.post')
-    @mock.patch('ricohapi.mstorage.client.open')
-    def test_upload_json_error(self, opn, req):
-        opn.side_effect = mock.mock_open()
-        req.return_value.text = 'not json'
-        ret = self.mstorage.upload('path.jpg')
-
     @raises(RequestException)
-    @mock.patch('requests.post')
-    @mock.patch('ricohapi.mstorage.client.open')
-    def test_upload_req_error(self, opn, req):
-        req.side_effect = RequestException
-        ret = self.mstorage.upload('path.jpg')
-
-    @raises(RequestException)
-    @mock.patch('requests.get')
-    def test_download_req_error(self, req):
-        req.side_effect = RequestException
-        ret = self.mstorage.download('id1')
-
-    @raises(RequestException)
-    @mock.patch('requests.get')
-    def test_download_to_req_error(self, req):
-        req.side_effect = RequestException
-        ret = self.mstorage.download_to('id1', 'path.jpg')
-
-    @raises(Exception)
-    @mock.patch('requests.get')
-    @mock.patch('ricohapi.mstorage.client.open')
-    def test_download_to_error(self, opn, req):
-        opn.side_effect = Exception
-        ret = self.mstorage.download_to('id1', 'path.jpg')
-
-    @raises(RequestException)
-    @mock.patch('requests.get')
-    def test_delete_req_error(self, req):
-        req.side_effect = RequestException
-        ret = self.mstorage.delete('id1')
-
-    @raises(RequestException)
-    @mock.patch('requests.get')
+    @mock.patch('requests.request')
     def test_info_req_error(self, req):
         req.side_effect = RequestException
         ret = self.mstorage.info('id1')
 
     @raises(ValueError)
-    @mock.patch('requests.get')
+    @mock.patch('requests.request')
     def test_info_json_error(self, req):
         req.return_value.text = 'not json'
         ret = self.mstorage.info('id1')
 
-    @raises(RequestException)
-    @mock.patch('requests.get')
-    def test_meta_req_error(self, req):
-        req.side_effect = RequestException
-        ret = self.mstorage.meta('id1')
+    @raises(ValueError)
+    @mock.patch('requests.request')
+    def test_meta_scope_error(self, req):
+        req.return_value.text='{"a": "b"}'
+        ret = self.mstorage.meta('id1', 'undefined_scope')
 
     @raises(ValueError)
-    @mock.patch('requests.get')
-    def test_info_meta_error(self, req):
-        req.return_value.text = 'not json'
-        ret = self.mstorage.meta('id1')
-
-    @raises(RequestException)
-    @mock.patch('requests.get')
-    def test_list_req_error(self, req):
-        req.side_effect = RequestException
-        ret = self.mstorage.list('id1')
+    @mock.patch('requests.request')
+    def test_add_meta_num_error(self, req):
+        meta = {'user.'+str(num):str(num) for num in range(11)}
+        ret = self.mstorage.add_meta('id1', meta)
 
     @raises(ValueError)
-    @mock.patch('requests.get')
-    def test_info_list_error(self, req):
-        req.return_value.text = 'not json'
-        ret = self.mstorage.list('id1')
+    @mock.patch('requests.request')
+    def test_add_meta_key_error(self, req):
+        meta = {'invalid_key': 'value'}
+        ret = self.mstorage.add_meta('id1', meta)
+
+    @raises(ValueError)
+    @mock.patch('requests.request')
+    def test_add_meta_value_empty_error(self, req):
+        meta = {'user.key': ''}
+        ret = self.mstorage.add_meta('id1', meta)
+
+    @raises(ValueError)
+    @mock.patch('requests.request')
+    def test_add_meta_value_over_error(self, req):
+        value = b''.join([b'a' for dummy in range(1025)])
+        meta = {'user.key': value}
+        ret = self.mstorage.add_meta('id1', meta)
+
+    @raises(ValueError)
+    @mock.patch('requests.request')
+    def test_add_meta_value_type_error(self, req):
+        meta = {'user.key': 5}
+        ret = self.mstorage.add_meta('id1', meta)
+
+    @raises(ValueError)
+    @mock.patch('requests.request')
+    def test_add_meta_value_encode_error(self, req):
+        meta = {'user.key': b'\x82\xA0'}
+        ret = self.mstorage.add_meta('id1', meta)
+
+    @raises(ValueError)
+    @mock.patch('requests.request')
+    def test_remove_meta_scope_error(self, req):
+        ret = self.mstorage.remove_meta('id1', 'invalid_scope')
