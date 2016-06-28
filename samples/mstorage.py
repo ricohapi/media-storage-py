@@ -2,6 +2,7 @@
 # Copyright (c) 2016 Ricoh Co., Ltd. All Rights Reserved.
 
 """media storage sample"""
+from __future__ import print_function
 import json
 from ricohapi.mstorage.client import MediaStorage
 from ricohapi.auth.client import AuthClient
