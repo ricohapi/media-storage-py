@@ -5,7 +5,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='ricohapi-mstorage',
-    version='1.1.0',
+    version='1.2.0',
     description='Ricoh API Media Storage for Python',
     long_description="""Ricoh API Media Storage for Python""",
     author='Ricoh',

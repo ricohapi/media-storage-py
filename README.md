@@ -119,5 +119,5 @@ mstorage.remove_meta('<media_id>', 'user')
 return media ids which have all key value pairs
 
 ```python
-mstorage.list({'filter': { 'meta.user.<key1>' : '<value1>', 'meta.user.<key2>' : '<value2>', ...}})
+mstorage.list({'limit': 25, 'after': '<cursor-id>', 'filter': { 'meta.user.<key1>' : '<value1>', 'meta.user.<key2>' : '<value2>', ...}})
 ```

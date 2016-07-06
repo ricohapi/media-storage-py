@@ -13,11 +13,18 @@ from ricohapi.auth.client import AuthClient
 
 class MediaStorage(object):
     """media storage"""
+    __ENDPOINT = 'https://mss.ricohapi.com/v1'
+    __MEDIA_ROOT_PATH = '/media'
+    __SEARCH_PATH = '/media/search'
+    __MEDIA_PATH = '/media/{mid}'
+    __CONTENT_PATH = '/media/{mid}/content'
+    __META_PATH = '/media/{mid}/meta'
+    __USER_META_PATH = '/media/{mid}/meta/user'
+    __SCOPE = AuthClient.SCOPES['MStorage']
+    __USER_KEY_RE = re.compile(r'^user\.([A-Za-z0-9_\-]{1,256})$')
 
     def __init__(self, aclient):
         self.__aclient = aclient
-        self.__endpoint = 'https://mss.ricohapi.com/v1'
-        self.__re_user_key = re.compile(r'^user\.([A-Za-z0-9_\-]{1,32})$')
 
     def __create_headers(self, options=None):
         headers = {
@@ -28,7 +35,7 @@ class MediaStorage(object):
         return headers
 
     def __request(self, method, path, **kwargs):
-        url = self.__endpoint + path
+        url = MediaStorage.__ENDPOINT + path
         if 'headers' not in kwargs:
             kwargs['headers'] = self.__create_headers()
         try:
@@ -70,11 +77,11 @@ class MediaStorage(object):
 
     def connect(self):
         """connect to server"""
-        self.__aclient.session(AuthClient.SCOPES['MStorage'])
+        self.__aclient.session(MediaStorage.__SCOPE)
 
     def upload(self, save_path):
         """upload media"""
-        path = '/media'
+        path = MediaStorage.__MEDIA_ROOT_PATH
         headers = self.__create_headers({
             'Content-Type': 'image/jpeg'
         })
@@ -83,7 +90,7 @@ class MediaStorage(object):
         return MediaStorage.__parse_json(res.text)
 
     def __download(self, mid, **kwargs):
-        path = '/media/' + mid +'/content'
+        path = MediaStorage.__CONTENT_PATH.format(mid=mid)
         res = self.__request('get', path, **kwargs)
         return res
 
@@ -101,78 +108,88 @@ class MediaStorage(object):
 
     def list(self, params=None):
         """list media"""
-        path = '/media'
         if params is None:
-            ret = self.__get_json(path)
+            ret = self.__get_json(MediaStorage.__MEDIA_ROOT_PATH)
         elif not 'filter' in params:
-            ret = self.__get_json(path, params=params)
+            ret = self.__get_json(MediaStorage.__MEDIA_ROOT_PATH, params=params)
         else:
-            path += '/search'
-            data = json.dumps({
-                'search_version': '2016-06-01',
+            payload = {
+                'search_version': '2016-07-08',
                 'query': params['filter']
-            })
-            res = self.__request('post', path, data=data)
+            }
+            paging = {}
+            if 'after' in params:
+                paging['after'] = params['after']
+            if 'before' in params:
+                paging['before'] = params['before']
+            if 'limit' in params:
+                paging['limit'] = params['limit']
+            if len(paging) != 0:
+                payload['paging'] = paging
+            res = self.__request('post', MediaStorage.__SEARCH_PATH, data=json.dumps(payload))
             ret = MediaStorage.__parse_json(res.text)
         return ret
 
     def delete(self, mid):
         """delete media meta"""
-        path = '/media/' + mid
+        path = MediaStorage.__MEDIA_PATH.format(mid=mid)
         self.__request('delete', path)
 
     def info(self, mid):
         """get media info"""
-        path = '/media/' + mid
+        path = MediaStorage.__MEDIA_PATH.format(mid=mid)
         return self.__get_json(path)
 
     def meta(self, mid, scope=None):
         """get media meta"""
-        path = '/media/' + mid + '/meta'
         if scope is None:
+            path = MediaStorage.__META_PATH.format(mid=mid)
             ret = self.__get_json(path)
         elif scope in {'exif', 'gpano', 'user'}:
-            path += '/' + scope
+            path = MediaStorage.__META_PATH.format(mid=mid) + '/' + scope
             ret = self.__get_json(path)
         else:
-            match = self.__re_user_key.match(scope)
+            match = MediaStorage.__USER_KEY_RE.match(scope)
             if match:
-                path += '/user/' + match.group(1)
+                path = MediaStorage.__USER_META_PATH.format(mid=mid) + '/' + match.group(1)
                 ret = self.__request('get', path).text
             else:
-                raise ValueError('Argument ' + str(scope) + ' is invalid.')
+                raise ValueError('Argument {0} is invalid.'.format(scope))
         return ret
 
     def add_meta(self, mid, meta):
         """add media meta"""
-        if len(meta) > 10:
-            raise ValueError('Number of meta must be less than or equal to 10.')
+        max_count = 10
+        min_len = 1
+        max_len = 1024
+        if len(meta) > max_count:
+            raise ValueError('Number of meta must be less than or equal to {0}.'.format(max_count))
 
-        base_path = '/media/' + mid + '/meta/user/'
+        base_path = MediaStorage.__USER_META_PATH.format(mid=mid) + '/'
         headers = self.__create_headers({
             'Content-Type': 'text/plain'
         })
 
         for key, value in meta.items():
-            match = self.__re_user_key.match(key)
+            match = MediaStorage.__USER_KEY_RE.match(key)
             if match:
                 path = base_path + match.group(1)
             else:
-                raise ValueError('Key ' + key + ' is invalid.')
+                raise ValueError('Key {0} is invalid.'.format(key))
 
             data = MediaStorage.__encode_to_utf8_bytes(value)
-            if len(data) == 0 or len(data) > 1024:
-                raise ValueError('Value bytes length must be 1-1024.')
+            if len(data) < min_len or len(data) > max_len:
+                raise ValueError('Value bytes length must be {0}-{1}.'.format(min_len, max_len))
 
             self.__request('put', path, headers=headers, data=data)
 
     def remove_meta(self, mid, scope):
         """remove media meta"""
-        path = '/media/' + mid + '/meta/user'
+        path = MediaStorage.__USER_META_PATH.format(mid=mid)
         if scope != 'user':
-            match = self.__re_user_key.match(scope)
+            match = MediaStorage.__USER_KEY_RE.match(scope)
             if match:
                 path += '/' + match.group(1)
             else:
-                raise ValueError('Argument ' + str(scope) + ' is invalid.')
+                raise ValueError('Argument {0} is invalid.'.format(scope))
         self.__request('delete', path)
